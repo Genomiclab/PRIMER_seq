@@ -1,36 +1,44 @@
-# Example provenance and verification
+# Synthetic examples and checks
 
-## Public example data
+## Example inputs
 
-The BAM is generated from the public hg19 reference using simulated fragment positions, methylation states and bisulfite-converted bases. It contains 3,880 read pairs, 85-base reads, and 97 demonstration CpG islands. Read names begin `SIMFRAG`; it contains no sampled participant reads or original sample identifiers. `examples/make_demo_bam.R` and `examples/simulation.tsv` regenerate this example with seed 20261120. Read/fragment-length settings were chosen from rounded summaries of a private plasma check.
+`examples/bam/` contains 3,880 simulated read pairs across 97 hg19 CpG islands. The BAM is generated from the public reference using simulated fragment positions, methylation states and bisulfite-converted bases. Read names begin `SIMFRAG`. Regenerate it with:
 
-The three-cancer numerical tables are independently drawn synthetic observations. Their ranges were calibrated from feature means and variances in the original training subset for Normal, Lung, Colorectum and Liver. Noise and shared simulated latent terms were added, methylation values were bounded to [0,1], and canonical motif frequencies were normalized to sum to one. No original participant row was copied. Sex and stage values are artificial. The aggregate calibration inputs remain private; the supplied synthetic tables are the fixed public inputs for the example.
+```bash
+Rscript examples/make_demo_bam.R work/new_simulated_bam
+```
 
-Training, validation and blind examples contain distinct synthetic sample keys. Held-out diagnosis and stage labels reside in `truth.tsv`; the prediction command receives no truth file. Because the example labels are openly available, this demonstrates the blind-scoring interface rather than real clinical blinding.
+`examples/three_cancers/` contains fixed synthetic seed tables for Normal, Lung, Colorectum and Liver. Training has 160 samples, validation 40 and blind testing 40, with equal group sizes. Identifiers, sex and stage labels are simulated. Held-out diagnoses are stored in separate truth files.
 
-## Completed checks
+`examples/make_study_demo.R` expands the five methylation tables to the complete study marker panel. It uses seeded mixtures of existing synthetic columns and added noise, bounded to [0,1]. The same column mixtures are used across cohorts; noise is generated separately. EM/BPM already contain all 4,096 canonical motifs. This generator reads only public example tables and marker identities.
 
-The public `examples/run_demo.py` command completed from the supplied inputs, including:
+The small seed panel in `examples/three_cancers/markers.tsv` is used to construct the initial example, including the 97-region BAM. Default model training uses `marker_file/markers.tsv`.
 
-- BAM → indexed mHap, methylation region statistics, EM and BPM.
-- Step 2 assembly of the BAM profile and import of all three synthetic cohorts.
-- All five algorithms, all five folds, both tasks and both model layers.
-- Prediction of the BAM-derived synthetic sample using the newly fitted model.
-- Separate validation and blind predictions, followed by truth-based evaluation.
+## Reference outputs
 
-The example output has three trained tissue classes and 360 newly fitted fold files. Fixed-input results in the tested single-thread environment were:
+`examples/expected_step1/` contains the simulated BAM outputs with the full `config/hg19_cpgIsland.bed`. Most regions have no coverage in this small BAM. Compare uncompressed mHap records and numerical contents rather than gzip headers.
 
-| Synthetic cohort | n | TP | FN | TN | FP | AUC |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Validation | 40 | 20 | 10 | 10 | 0 | 0.9300 |
-| Blind | 40 | 25 | 5 | 10 | 0 | 0.9733 |
+The tested software versions are in [ENVIRONMENT.md](ENVIRONMENT.md). Full-panel checks covered marker coverage, matrix assembly, binary and multiclass learner fitting, and SVM interface equivalence. The complete 360-model training and held-out scoring run has not been completed for this marker update. Steps 4–5 generate predictions and evaluation tables when the demonstration is run.
 
-These are software demonstration results, not study performance estimates. The complete aggregate outputs are under `examples/expected_results/`; exact probabilities can vary across environments. `examples/expected_step1/` contains reference outputs for the simulated BAM. Compare numerical contents, since compressed file headers can vary.
+## Input checks
 
-Focused regression checks cover N-containing motif denominators, zero coverage, missing motifs, text sample keys, sex adjustment with reduced class sets, and rejection of training/scoring participant overlap.
+```bash
+Rscript tests/motif_denominators.R
+Rscript tests/participant_separation.R
+Rscript tests/processed_inputs.R
+Rscript tests/svm_input.R
+```
 
-The source BAM processing was also exercised on a private 1,500-fragment plasma subset on macOS and a Linux HPC environment. The uncompressed mHap records and all EM/BPM count and frequency tables matched exactly. The five modelling metrics matched for all covered regions in a 40-region check; zero-coverage regions are consistently converted to missing by Step 2. The installed mHapTk versions differed in auxiliary output columns and zero-coverage text representation. That subset and its derived files are excluded from this release. The original study scripts remain separate from the public implementation.
+These checks cover canonical/all-count denominators, missing motifs and zero coverage, text sample keys, sex handling, participant overlap, matrix orientation, raw/frequency imports and equivalence with the BAM-profile input route.
 
-## Release contents
+The mHap batch route was also checked with synthetic inputs, including an unindexed source mHap file, existing CGI statistics, reordered motif matrices and separate cohort manifests. The source file was preserved, and held-out diagnoses were omitted from the resulting prediction metadata.
 
-The repository contains source code, configuration, a reduced marker panel, simulated inputs and their example outputs. It contains no original fitted model, serialized R model object, original control threshold, original sample list or clinical table. Runtime outputs belong under the Git-ignored `work/` directory. Model output directories contain fitted parameters and should be handled according to the user's own data-release policy.
+To check the merged study panel against the source CSVs:
+
+```bash
+python3 scripts/build_markers.py --out work/marker_check
+diff marker_file/markers.tsv work/marker_check/markers.tsv
+diff marker_file/counts.tsv work/marker_check/counts.tsv
+```
+
+Training checks the full selected panel before fitting. A missing marker column stops the run without writing a model directory. Step 3 records the ordered `markers_used.tsv`, fold assignments and R session information on completion.

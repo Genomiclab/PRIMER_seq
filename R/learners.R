@@ -7,7 +7,7 @@ fit_learner <- function(a,x,y,threads=1L,preset="study") {
     return(glmnet::cv.glmnet(x,response,family=if(multi) "multinomial" else "binomial",alpha=0.5,nfolds=if(preset=="demo") 5L else 10L))
   }
   if (a=="GBM") {
-    if (threads>1L) {
+    if (threads>1L && preset!="demo") {
       cl <- parallel::makeCluster(threads)
       doParallel::registerDoParallel(cl)
       on.exit({parallel::stopCluster(cl); foreach::registerDoSEQ()})
@@ -15,26 +15,25 @@ fit_learner <- function(a,x,y,threads=1L,preset="study") {
     control <- caret::trainControl(allowParallel=threads>1L,verboseIter=FALSE)
     options <- list(x=as.data.frame(x),y=y,method="gbm",trControl=control,verbose=FALSE)
     if(preset=="demo") {
-      options$trControl <- caret::trainControl(method="cv",number=3L,allowParallel=threads>1L)
-      options$tuneGrid <- data.frame(n.trees=75L,interaction.depth=2L,shrinkage=0.1,n.minobsinnode=5L)
+      options$trControl <- caret::trainControl(method="none",allowParallel=FALSE)
+      options$tuneGrid <- data.frame(n.trees=25L,interaction.depth=1L,shrinkage=0.1,n.minobsinnode=5L)
     }
     return(do.call(caret::train,options))
   }
   if (a=="SVM_linear") {
-    df <- as.data.frame(x); df$Group <- y
-    return(e1071::svm(Group~.,data=df,type="C-classification",kernel="linear",scale=TRUE,probability=TRUE))
+    return(e1071::svm(x=x,y=y,type="C-classification",kernel="linear",scale=TRUE,probability=TRUE))
   }
   if (a=="XGBoost") {
     p <- list(booster="gbtree",objective=if(multi) "multi:softprob" else "binary:logistic",
               eval_metric=if(multi) "mlogloss" else "logloss",nthread=threads)
     if (multi) p$num_class <- nlevels(y)
-    return(xgboost::xgb.train(p,xgboost::xgb.DMatrix(x,label=as.integer(y)-1L),nrounds=if(preset=="demo") 100L else 1000L,verbose=0))
+    return(xgboost::xgb.train(p,xgboost::xgb.DMatrix(x,label=as.integer(y)-1L),nrounds=if(preset=="demo") 20L else 1000L,verbose=0))
   }
   if (a=="Catboost") {
     # Historical labels were the one-based factor codes. Use the same ordering.
     pool <- catboost::catboost.load_pool(x,label=as.integer(y))
     return(catboost::catboost.train(pool,NULL,params=list(loss_function=if(multi) "MultiClass" else "Logloss",
-        iterations=if(preset=="demo") 150L else 2000L,thread_count=threads,verbose=0L,allow_writing_files=FALSE)))
+        iterations=if(preset=="demo") 25L else 2000L,thread_count=threads,verbose=0L,allow_writing_files=FALSE)))
   }
   stop("Unknown learner: ",a)
 }

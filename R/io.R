@@ -4,7 +4,7 @@ algorithms <- c("LR","GBM","SVM_linear","XGBoost","Catboost")
 archive_channel <- function(channel) switch(channel, EM="mer6_raw_4bp", BPM="BPM_raw_4bp", channel)
 read_tab <- function(path) {
   hdr <- names(read.delim(path,nrows=0L,check.names=FALSE))
-  cl <- rep(NA_character_,length(hdr)); cl[hdr %in% c("sample_id","participant_id","profile","sex","group","stage","feature","kmer")] <- "character"
+  cl <- rep(NA_character_,length(hdr)); cl[hdr %in% c("sample_id","participant_id","profile","cgi","mhap","sex","group","stage","feature","kmer")] <- "character"
   read.delim(path,check.names=FALSE,stringsAsFactors=FALSE,quote="",comment.char="",colClasses=cl)
 }
 write_tab <- function(x,path) write.table(x,path,sep="\t",quote=FALSE,row.names=FALSE,na="NA")

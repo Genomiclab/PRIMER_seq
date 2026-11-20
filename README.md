@@ -1,128 +1,112 @@
-# PRIMER_seq: BAM to ensemble training and evaluation
+# PRIMER_seq
 
-This repository provides a step-by-step workflow for paired-end PRIMER plasma DNA data: BAM → mHap, end motifs (EM), breakpoint motifs (BPM) → five methylation channels and two fragmentomic channels → two-layer ensemble training → validation and blinded prediction.
+Processing and ensemble modelling of paired-end PRIMER plasma DNA data. The workflow uses five methylation features (MM, PDR, CHALM, MHL and Entropy), end motifs (EM) and breakpoint motifs (BPM) for cancer detection and tissue-of-origin prediction.
 
-The release includes a **simulated BAM**, **synthetic Lung, Colorectum, Liver and Normal cohorts**, and a small marker panel. All model weights are fitted when the example runs. **The original study's fitted models and participant-level data are not distributed in this repository.** The examples demonstrate the computation; their results do not reproduce or estimate the manuscript's clinical performance.
+The study marker lists are in [`marker_file/`](marker_file/README.md). Training uses these lists by default. Example samples are simulated; participant data and the original fitted models are not included.
 
-[中文说明](docs/QUICKSTART_zh.md) · [Installation](docs/ENVIRONMENT.md) · [Inputs and methods](docs/METHODS.md) · [Example provenance and checks](docs/VERIFICATION.md)
+[Installation](docs/ENVIRONMENT.md) · [Input formats](docs/INPUTS.md) · [Methods](docs/METHODS.md) · [中文说明](docs/QUICKSTART_zh.md)
 
-## Run the complete example
+## Run the example
 
-Install the dependencies, then run from this repository's root:
+After installing the dependencies, run from the repository root:
 
 ```bash
 Rscript scripts/check_environment.R all
 python3 examples/run_demo.py --out work/demo --threads 1
 ```
 
-The driver runs all five steps, trains all five algorithms in all five folds, predicts the BAM-derived sample, and evaluates the separate validation and blind cohorts. Every command requires a new output directory. Outputs are kept under `work/`, which is excluded from Git.
+This runs Steps 1–5 with the complete marker panel, all five learners and five folds. It processes one simulated BAM, trains on 160 synthetic samples (Normal, Lung, Colorectum and Liver), and evaluates separate validation and blind sets of 40 samples each. The BAM-derived sample is also scored. All model weights are fitted during the run.
 
-| Example | Contents |
-| --- | --- |
-| `examples/bam/` | 3,880 simulated read pairs across 97 hg19 CpG islands, BAM index, small CpG annotation and BED |
-| `examples/three_cancers/train/` | 160 synthetic samples: 40 per group |
-| `examples/three_cancers/validation/` | 40 synthetic samples: 10 per group |
-| `examples/three_cancers/blind/` | 40 synthetic samples: 10 per group |
-| `examples/three_cancers/markers.tsv` | Supplied feature identities for detection and tissue of origin |
-| `examples/expected_step1/` | Reference outputs for the supplied simulated BAM |
-| `examples/expected_results/` | Aggregate example results from a tested environment |
+The supplied small synthetic tables are expanded to the full methylation marker panel by `examples/make_study_demo.R`. Generated values are simulated, including values at the study marker coordinates. Full-panel training is CPU intensive: 360 fold models are fitted even with the shortened demo preset. Use a new output directory for each run.
 
-The single BAM illustrates sample processing. The separate synthetic cohorts provide enough independent rows for training and evaluation. For an actual cohort, process each participant's BAM using Step 1 and assemble those profiles using Step 2.
-
-## Step 1 — Generate mHap, methylation features, EM and BPM
+## Step 1: BAM to mHap, methylation features, EM and BPM
 
 ```bash
 python3 scripts/step1_bam_to_features.py \
   --bam examples/bam/synthetic.bam \
   --cpg examples/bam/hg19_demo_CpG.gz \
-  --bed examples/bam/regions.bed \
+  --bed config/hg19_cpgIsland.bed \
   --out work/step1
 ```
 
-Outputs are indexed `sample.mhap.gz`, `cgi.tsv`, combined raw counts in `motifs.tsv`, and separate `EM.tsv` and `BPM.tsv` files. The five methylation channels used by the model are **MM, PDR, CHALM, MHL and Entropy**. Each fragmentomic channel uses 4,096 A/C/G/T hexamers.
+The output directory contains `sample.mhap.gz` and its index, `cgi.tsv`, raw counts in `motifs.tsv`, and separate `EM.tsv` and `BPM.tsv` files. The model uses autosomal CGI features and canonical six-base motifs.
 
-For your samples, supply coordinate-sorted, paired-end, methylation-informative PRIMER BAMs aligned to hg19, the full indexed hg19 CpG reference, and `config/hg19_cpgIsland.bed`. The small example reference covers only the demonstration regions. [Reference and software setup](docs/ENVIRONMENT.md)
+For other BAMs, supply the full indexed hg19 CpG reference. The small reference shipped with the example covers only the simulated reads. Use the supplied full CGI BED to retain every marker region.
 
-## Step 2 — Assemble sample-by-feature matrices
+## Step 2: Build sample-by-feature matrices
 
-Assemble the profile generated in Step 1:
+Assemble the single BAM profile:
 
 ```bash
 Rscript scripts/step2_build_matrices.R \
   --profiles examples/bam_sample.tsv --out work/matrices/bam
 ```
 
-Import the supplied three-cancer training, validation and blind tables:
+Prepare and import the synthetic cohorts:
 
 ```bash
+Rscript examples/make_study_demo.R --out work/tables
 for cohort in train validation blind; do
   Rscript scripts/step2_build_matrices.R \
-    --tables examples/three_cancers/$cohort --out work/matrices/$cohort
+    --tables work/tables/$cohort --out work/matrices/$cohort
 done
 ```
 
-Each cohort directory contains seven numeric matrices and `samples.tsv`. Training metadata include `group`. Validation and blind diagnoses are stored separately in `truth.tsv` and are read only by Step 5. [Metadata and matrix schema](docs/METHODS.md)
+Each output contains seven R matrices and `samples.tsv`. Training metadata include `group`; held-out diagnoses are kept in separate `truth.tsv` files.
 
-## Step 3 — Train the two-layer ensemble with supplied markers
+## Step 3: Train the ensemble
 
 ```bash
 Rscript scripts/step3_train_ensemble.R \
-  --train work/matrices/train \
-  --markers examples/three_cancers/markers.tsv \
-  --out work/model --preset demo --threads 1
+  --train work/matrices/train --out work/model --preset demo --threads 1
 ```
 
-The first layer trains **elastic-net logistic regression, GBM, linear SVM, XGBoost and CatBoost**, separately for each channel and task. The second layer trains a linear SVM on first-layer out-of-fold probabilities. Detection and tissue-of-origin models each use five folds; the complete example produces 360 newly fitted fold models.
+The default panel is `marker_file/markers.tsv`, with separate detection and tissue-of-origin lists for all seven channels. The script checks that every marker is present before fitting. The ordered features actually used are saved as `markers_used.tsv` in the model directory.
 
-The `demo` preset reduces internal tuning and boosting iterations for this small dataset. The `study` preset uses the original script settings, including 1,000 XGBoost rounds and 2,000 CatBoost iterations. Both presets use all five algorithms and the same two-layer architecture. To train on your cohort, supply its matrices and marker table and use `--preset study`. [Exact settings](docs/METHODS.md)
+The first layer fits elastic-net logistic regression, GBM, linear SVM, XGBoost and CatBoost. A second-layer linear SVM combines their out-of-fold probabilities. Each task uses five folds at each layer. The `demo` preset reduces tuning and boosting iterations; `--preset study` uses the original script settings. See [training settings](docs/METHODS.md#ensemble-and-training-presets).
 
-The output contains newly trained weights, selected feature lists, fold assignments, out-of-fold predictions, a newly estimated detection threshold, and the R session information.
-
-## Step 4 — Predict validation and blind samples
+## Step 4: Predict validation and blind samples
 
 ```bash
-Rscript scripts/step4_predict.R \
-  --data work/matrices/validation --model work/model \
-  --cohort validation --out work/predictions/validation
-
-Rscript scripts/step4_predict.R \
-  --data work/matrices/blind --model work/model \
-  --cohort blind --out work/predictions/blind
-
-Rscript scripts/step4_predict.R \
-  --data work/matrices/bam --model work/model \
-  --cohort validation --out work/predictions/bam
+for cohort in validation blind; do
+  Rscript scripts/step4_predict.R \
+    --data work/matrices/$cohort --model work/model \
+    --cohort $cohort --out work/predictions/$cohort
+done
 ```
 
-Predictions contain detection scores and calls, the fixed threshold learned in Step 3, and tissue probabilities for detection-positive samples. The third command completes the BAM-to-prediction example; that simulated BAM has no clinical diagnosis. Inference never reads `truth.tsv`.
+Predictions include detection scores, calls at the training-derived threshold, and tissue probabilities for detection-positive samples. `--cohort blind` applies the original blind-cohort motif normalization. Inference does not read truth labels.
 
-## Step 5 — Evaluate after predictions are fixed
+The single BAM can be scored with the same command using `--data work/matrices/bam --cohort validation --out work/predictions/bam`.
+
+## Step 5: Evaluate fixed predictions
 
 ```bash
 for cohort in validation blind; do
   Rscript scripts/step5_evaluate.R \
     --predictions work/predictions/$cohort/predictions.tsv \
-    --truth examples/three_cancers/$cohort/truth.tsv \
-    --out work/reports/$cohort
+    --truth work/tables/$cohort/truth.tsv --out work/reports/$cohort
 done
 ```
 
-Reports include confusion counts, sensitivity, specificity, AUC, ROC coordinates, tissue-of-origin top-k accuracy and confusion counts, and a PDF plot. Tissue accuracy is calculated among detected true cancer cases.
+Reports contain sensitivity, specificity, AUC, ROC coordinates, tissue top-k accuracy, confusion counts and a PDF. Synthetic example results are software checks, not clinical performance estimates.
 
-## Process your own cohort
+## Start from existing mHap and EM/BPM matrices
 
-Fill [the manifest template](examples/cohorts_template.tsv) with one specimen per participant and existing train/validation/blind assignments. The template rows are illustrative; they are not a training dataset. Supply either a BAM or an already completed Step 1 profile per row.
+Fill [`examples/processed_cohorts_template.tsv`](examples/processed_cohorts_template.tsv) with one specimen per participant and the existing cohort assignments. Use one mHap file or CGI statistics file per row. EM/BPM matrices may be TSV, CSV, RDS or single-object RData files; see [formats and normalization](docs/INPUTS.md).
 
 ```bash
-python3 workflow/cohorts.py --manifest /path/to/cohorts.tsv \
-  --cpg /path/to/hg19_CpG.gz --bed config/hg19_cpgIsland.bed \
+python3 workflow/processed_cohorts.py \
+  --manifest /path/to/cohorts.tsv \
+  --em /path/to/EM.tsv.gz --bpm /path/to/BPM.tsv.gz \
+  --motif-format counts --cpg /path/to/hg19_CpG.gz \
   --out work/cohorts --jobs 2
 
 Rscript scripts/step3_train_ensemble.R \
-  --train work/cohorts/matrices/train --markers /path/to/markers.tsv \
-  --out work/cohort_model --preset study --threads 4
+  --train work/cohorts/matrices/train --out work/cohort_model \
+  --preset study --threads 4
 ```
 
-Continue with Steps 4–5 using `work/cohorts/matrices/validation` and `work/cohorts/matrices/blind`. Truth labels remain outside the inference inputs. The batch entry checks sample and participant uniqueness across all three cohorts. Large cohorts can run Step 1 as separate cluster jobs and reuse their completed profiles.
+Continue with Steps 4–5 using `work/cohorts/matrices/validation` and `work/cohorts/matrices/blind`, the newly fitted `work/cohort_model`, and the corresponding truth tables. The batch driver checks sample and participant separation across cohorts. If starting from BAMs, use [`workflow/cohorts.py`](workflow/cohorts.py) with [`examples/cohorts_template.tsv`](examples/cohorts_template.tsv).
 
-Run `Rscript tests/motif_denominators.R` and `Rscript tests/participant_separation.R` for focused input and scoring checks. To regenerate the simulated BAM, run `Rscript examples/make_demo_bam.R work/new_simulated_bam`.
+Input checks and reference outputs are described in [verification](docs/VERIFICATION.md). Generated matrices, models and predictions belong under `work/`.

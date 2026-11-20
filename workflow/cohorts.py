@@ -16,7 +16,7 @@ GROUPS = {"Normal", "Lung", "Colorectum", "Stomach", "Liver", "Thyroid", "Breast
           "Lymphoma", "Esophagus", "Pancreas", "Bladder", "Prostate", "Ovary"}
 
 
-def read_manifest(path):
+def read_manifest(path, input_fields=("bam", "profile")):
     with path.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         fields = reader.fieldnames or []
@@ -41,12 +41,12 @@ def read_manifest(path):
             raise ValueError(f"Line {line}: unknown cohort or sex")
         if row["cohort"] == "train" and row.get("group") not in GROUPS:
             raise ValueError(f"Line {line}: training requires a study diagnosis in group")
-        kinds = [k for k in ("bam", "profile") if row.get(k)]
+        kinds = [k for k in input_fields if row.get(k)]
         if len(kinds) != 1:
-            raise ValueError(f"Line {line}: specify exactly one of bam or profile")
+            raise ValueError(f"Line {line}: specify exactly one of " + ", ".join(input_fields))
         kind = kinds[0]
         src = (path.parent / row[kind]).resolve(strict=True)
-        if src in sources or (kind == "bam" and not src.is_file()):
+        if src in sources or (kind != "profile" and not src.is_file()):
             raise ValueError(f"Line {line}: duplicate or invalid input")
         if kind == "profile" and not all((src/f).is_file() for f in ("cgi.tsv", "motifs.tsv")):
             raise ValueError(f"Line {line}: missing profile files")

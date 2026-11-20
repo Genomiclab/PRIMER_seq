@@ -55,8 +55,11 @@ CatBoost R packages are provided in the [official v1.2 release](https://github.c
 
 ```bash
 Rscript scripts/check_environment.R bam
+Rscript scripts/check_environment.R processed
 Rscript scripts/check_environment.R train
 Rscript scripts/check_environment.R all
 ```
 
-The demonstration uses all five learners. Training time depends on the numerical libraries and CPU; the synthetic cohort is intentionally small. Full-size cohort matrices and models need substantially more memory and disk space. Use `--threads` for learner parallelism and `--jobs` for independent BAM processing.
+The `processed` check covers mHap-to-CGI calculation and matrix import: mHapTk, tabix, Python and R/data.table. Importing existing CGI statistics and EM/BPM matrices needs only R/data.table. The genome package and mHapTools are needed when starting from BAMs.
+
+The demonstration uses the complete study marker panel and all five learners. Its sample count is small, but fitting 360 fold models can take substantial time. Use `--threads` for learner parallelism and `--jobs` for independent sample preprocessing. The generated full-panel example tables and fitted models need more disk space than the repository itself.

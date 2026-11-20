@@ -10,6 +10,7 @@
 | `group` | Required training diagnosis; evaluation diagnoses belong in the separate truth table |
 | `stage` | Optional truth-table field: `I`, `II`, `III`, `IV`, or missing |
 | `profile` | Directory from Step 1, absolute or relative to the manifest TSV |
+| `mhap`, `cgi` | Alternative per-sample inputs for `workflow/processed_cohorts.py`; see [input formats](INPUTS.md) |
 | `cohort` | Batch-driver assignment: `train`, `validation`, `blind` |
 | `bam` | Batch-driver input BAM; supply exactly one of `bam` and `profile` per row |
 | `EM_valid_fraction`, `BPM_valid_fraction` | Fraction of total raw motif counts with no N, retained for the original blind-cohort normalization |
@@ -48,11 +49,13 @@ The original calculation counts eligible mapped, nonsecondary, properly paired R
 
 The two model matrices retain the 4,096 canonical hexamers. Absent motifs are represented as missing, then imputed to zero at model input. Training and internal validation normalize by the canonical total. The original blinded script normalizes by all counts, including N-containing motifs. Step 2 records the valid fractions, and `--cohort blind` multiplies the canonical frequencies by them once. The supplied synthetic cohort has valid fractions of one; `tests/motif_denominators.R` exercises non-unit fractions.
 
-## Supplied markers
+## Study markers
 
 The required marker TSV contains `task`, `channel`, `feature`. Tasks are `detection` and `origin`; channels are the seven names above. Preserve the intended order within a task/channel. Every list must contain at least two distinct features available in the corresponding matrix. No fitted coefficients or tree parameters are present in this file.
 
-The demonstration uses a reduced panel for Lung, Colorectum and Liver. It selects up to eight eligible feature identities per cancer per channel, then takes the union; the same small list is used for both demonstration tasks. The feature counts per task are MM 24, PDR 24, CHALM 24, MHL 24, Entropy 23, EM 23 and BPM 23. The union of methylation regions contains 97 CpG islands. This is a demonstration panel; it is not the full manuscript panel.
+`marker_file/markers.tsv` is the default panel for training and the demonstration. It combines the 14 study CSVs, preserving separate detection and origin lists and their feature order. Counts and file formats are listed in [marker_file/README.md](../marker_file/README.md). Step 3 checks coverage of the complete selected panel before fitting and records the features in `markers_used.tsv`.
+
+The small panel under `examples/three_cancers/markers.tsv` defines the seed synthetic tables and the 97-region BAM example. It is not the default training panel. `examples/make_study_demo.R` expands the public synthetic methylation tables to every region required by the study panel, using deterministic mixtures of seed columns and added noise. EM/BPM tables already cover all 4,096 canonical motifs. The generated values remain synthetic.
 
 By default all supplied marker identities are fixed before fitting. For optional training-only motif selection, use `--select_motifs true`. In that mode, EM/BPM columns with fewer than 50 missing rows enter Wilcoxon comparisons, with BH-adjusted P < 0.01 within each comparison. Detection compares each cancer to controls; origin compares cancer pairs. Selection takes place within the complete training cohort before its folds are constructed, as in the source scripts. Validation and blind labels never enter feature selection or training. Use an externally specified marker panel or nested selection if a different validation design requires it.
 
@@ -63,12 +66,14 @@ Each task has seven input channels, five first-layer learners and five folds: 17
 | Learner | `study` preset | `demo` preset |
 | --- | --- | --- |
 | LR | glmnet, alpha 0.5, 10 internal folds, `lambda.min` | Same, 5 internal folds |
-| GBM | caret `gbm`, default tuning/resampling | 3-fold CV; 75 trees, depth 2, shrinkage 0.1, minimum node size 5 |
+| GBM | caret `gbm`, default tuning/resampling | Fixed 25 trees, depth 1, shrinkage 0.1, minimum node size 5; no inner resampling |
 | Linear SVM | e1071, scaled features, probability estimates | Same |
-| XGBoost | 1,000 rounds | 100 rounds |
-| CatBoost | 2,000 iterations | 150 iterations |
+| XGBoost | 1,000 rounds | 20 rounds |
+| CatBoost | 2,000 iterations | 25 iterations |
 
 First-layer seeds are 35 for detection and 21 for origin, reset per learner. The second-layer seeds are 2 and 100. Held-out predictions average the five fitted fold probabilities at each layer. R version, package versions, numerical libraries and thread counts can affect numerical results.
+
+The linear SVM uses e1071's numeric matrix interface to avoid constructing a large formula term matrix for the full marker panel. With the same numeric inputs, labels and seed, the two interfaces produced identical support vectors, coefficients and probabilities in the binary and three-class checks.
 
 The detection threshold is estimated anew from training-control out-of-fold scores at the 97th percentile using `quantile(type=1)`. Validation uses `score > threshold`; blinded scoring uses `score >= threshold`, preserving the source script behavior. This percentile choice does not guarantee 97% specificity in a separate cohort.
 
@@ -78,4 +83,4 @@ For origin, the source scoring rule zeros Ovary/Breast for samples coded M and P
 
 Step 5 joins prediction and truth files by unique sample key and requires exactly matching sample sets. Detection reports confusion counts, sensitivity, specificity, rank-based AUC and ROC coordinates, with optional stage summaries. Origin top-k accuracy is conditioned on detected true cancers, with k capped at the number of trained tissue classes.
 
-The public inputs and training code reproduce the synthetic demonstration. The original clinical cohort, its full marker panel, its assignments and its fitted parameters are not included. Consequently this repository alone cannot reproduce the manuscript's numerical clinical results. A new fit on another cohort produces a new model and threshold.
+The public inputs and training code reproduce the synthetic demonstration using the study marker identities. Participant measurements, cohort assignments and original fitted parameters are not included. A new fit produces new model weights and a training-derived threshold; numerical results depend on the input cohort and software environment.

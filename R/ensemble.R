@@ -84,6 +84,16 @@ fit_study <- function(datadir,marker_path,dest,algos=algorithms,threads=1L,fixed
   if(!all(c("feature","task","channel") %in% names(markers))) stop("Invalid marker table")
   if(any(!markers$task %in% c("detection","origin")) || any(!markers$channel %in% channels) ||
      anyNA(markers$feature) || any(!nzchar(markers$feature))) stop("Invalid marker task, channel or feature")
+  for(task in c("detection","origin")) for(ch in channels) {
+    selected <- markers$feature[markers$task==task & markers$channel==ch]
+    if(length(selected)<2L || anyDuplicated(selected)) stop("Invalid marker list for ",task,"/",ch)
+  }
+  # Check all fixed marker inputs before fitting any learner.
+  for(ch in channels) {
+    if(ch %in% c("EM","BPM") && !fixed_motifs) next
+    required <- unique(markers$feature[markers$channel==ch])
+    invisible(load_features(datadir,ch,samples$sample_id,required))
+  }
   in_new_directory(dest,function(out) {
     dir.create(file.path(out,"weights")); dir.create(file.path(out,"training"))
     spec <- list(algorithms=algos,features=list(),tissues=classes,version=2L,preset=preset,
@@ -132,6 +142,10 @@ fit_study <- function(datadir,marker_path,dest,algos=algorithms,threads=1L,fixed
     }
     write_tab(samples,file.path(out,"training","samples.tsv"))
     write_tab(markers,file.path(out,"markers_input.tsv"))
+    used <- do.call(rbind,lapply(names(spec$features),function(task)
+      do.call(rbind,lapply(names(spec$features[[task]]),function(ch)
+        data.frame(task=task,channel=ch,feature=spec$features[[task]][[ch]])))))
+    write_tab(used,file.path(out,"markers_used.tsv"))
     saveRDS(spec,file.path(out,"spec.rds"))
     write_tab(data.frame(threshold=spec$threshold),file.path(out,"threshold.tsv"))
     writeLines(capture.output(sessionInfo()),file.path(out,"sessionInfo.txt"))
