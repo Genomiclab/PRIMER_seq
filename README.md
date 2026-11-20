@@ -1,6 +1,16 @@
 # PRIMER_seq
 
-Processing and ensemble modelling of paired-end PRIMER plasma DNA data. The workflow uses five methylation features (MM, PDR, CHALM, MHL and Entropy), end motifs (EM) and breakpoint motifs (BPM) for cancer detection and tissue-of-origin prediction.
+PRIMER_seq provides the analysis workflow for PRIMER plasma DNA sequencing and CancerPRIMER, a stacked ensemble for multicancer detection and tissue-of-origin prediction.
+
+![CancerPRIMER workflow: methylation and fragmentomic features, a two-layer ensemble, cancer detection and tissue-of-origin prediction.](docs/images/cancerprimer_overview.png)
+
+The schematic illustrates the 12-cancer study. The runnable example below uses simulated lung, colorectal and liver cancer samples, with non-cancer controls.
+
+Five CpG-island methylation features (MM, MHL, Entropy, CHALM and PDR) and two fragmentomic features (end motifs, EM; breakpoint motifs, BPM) enter the model through task-specific marker lists. Each feature type is modelled separately.
+
+At **Level 1**, five learners are fitted for each feature type: elastic-net logistic regression (LR), GBM, linear SVM, XGBoost and CatBoost. The ellipsis in the figure includes XGBoost and CatBoost. Five-fold out-of-fold probabilities form the inputs to a **Level 2 linear SVM**. See [model settings](docs/METHODS.md#ensemble-and-training-presets).
+
+Cancer detection and tissue-of-origin prediction use separately trained ensembles. Detection distinguishes cancer from non-cancer controls; tissue-of-origin training includes cancer cases only. During validation and blinded testing, tissue-of-origin probabilities are generated for detection-positive samples.
 
 The study marker lists are in [`marker_file/`](marker_file/README.md). Training uses these lists by default. Example samples are simulated; participant data and the original fitted models are not included.
 
