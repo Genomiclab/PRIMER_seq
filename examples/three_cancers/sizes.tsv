@@ -1,0 +1,4 @@
+cohort	per_group	total
+train	40	160
+validation	10	40
+blind	10	40

@@ -1,0 +1,10 @@
+truth	prediction	Freq
+Lung	Lung	1
+Colorectum	Lung	0
+Liver	Lung	0
+Lung	Colorectum	0
+Colorectum	Colorectum	10
+Liver	Colorectum	0
+Lung	Liver	0
+Colorectum	Liver	0
+Liver	Liver	9

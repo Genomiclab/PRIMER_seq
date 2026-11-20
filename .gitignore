@@ -1,0 +1,22 @@
+# Generated matrices, models, predictions and local data
+/work/
+/data/
+/private/
+/models/
+*.RData
+*.rds
+*.Rhistory
+*.Rproj.user/
+*.bam
+*.bai
+*.cram
+*.sam
+*.fastq*
+*.fq*
+!examples/bam/synthetic.bam
+!examples/bam/synthetic.bam.bai
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.venv/

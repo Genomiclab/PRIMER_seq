@@ -1,0 +1,6 @@
+parameter	value
+seed	20261120
+read_length	85
+fragment_length	125
+fragment_sd	25
+pairs_per_region	40

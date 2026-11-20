@@ -1,0 +1,5 @@
+sample_id	participant_id	cohort	sex	group	bam	profile
+EXAMPLE_TRAIN_001	EXAMPLE_P001	train	F	Normal	/path/to/control.bam	
+EXAMPLE_TRAIN_002	EXAMPLE_P002	train	M	Lung	/path/to/lung.bam	
+EXAMPLE_VALID_001	EXAMPLE_P003	validation	U		/path/to/validation.bam	
+EXAMPLE_BLIND_001	EXAMPLE_P004	blind	U			/path/to/completed/profile

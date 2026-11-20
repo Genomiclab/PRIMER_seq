@@ -1,0 +1,9 @@
+stratum	n	detected	sensitivity
+Lung	10	5	0.5
+Colorectum	10	10	1
+Liver	10	10	1
+Stage I	7	5	0.714285714285714
+Stage II	7	7	1
+Stage III	8	6	0.75
+Stage IV	8	7	0.875
+Stage I-II	14	12	0.857142857142857
